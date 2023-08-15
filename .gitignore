@@ -1,5 +1,8 @@
-data/
+data/*.pdf
+data/*.zip
+data/*.json
 temp/
+prep/
 .env
 
 # Byte-compiled / optimized / DLL files
