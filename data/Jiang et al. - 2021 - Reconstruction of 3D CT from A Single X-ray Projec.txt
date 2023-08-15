@@ -1,55 +1,109 @@
 Reconstruction of 3D CT from A Single X-ray Projection View Using CVAE-GAN 
+
 2nd Mengxi Zhang 
+
 3rd Ran Wei 
+
 4th Bo Liu 
+
 5th Xiangzhi Bai 
+
 6th Fugen Zhou 
+
 Abstract{\textemdash}Computed tomography can provide a 3D view of the patient{\textquoteright}s internal anatomy. However, traditional CT reconstruction methods require hundreds of X-ray projections through a full rotational scan of the body, which cannot be performed on a typical X-ray machine. In order to deal with the impact of organ movement caused by respiration in radiotherapy on the accuracy of radiotherapy, we propose to reconstruct CT from a single X-ray projection view using the conditional variational autoencoder. Conditional variational autoencoder encodes the features of a 2D X-ray projection. The decoder decodes the hidden variables encoded by the encoder and increase data dimension from 2D (X-rays) to 3D (CT) to generates a corresponding 3D CT. In addition, we use the discriminator to distinguish the generated 3D CT from the real 3D CT to make the generated 3D CT more realistic. We demonstrate the feasibility of the approach with 3D CT of two patients with lung cancer. 
+
 Index Terms{\textemdash}CT reconstruction, X-ray projection, VAE, GAN 
+
 I. INTRODUCTION 
+
 The precise knowledge of tumor position is important for intra-operative image-guidance of various treatment. For example, in radiotherapy of lung cancer , the respiratory motion causes the change of the position of the tumor and surrounding tissues, which leads to the uncertainty of the radiation dose. It is very necessary to obtain the actual 3D anatomical information during the treatment to guide the treatment and analyse the actual dose distribution. 
+
 X-ray projections enable us to observe the human body in real time and non-invasively. However, the anatomy is projected onto a plane in X-ray projections. The human tissues overlay each other and reduces the visibility. Computed tomography (CT) imaging can generate 3D volume with high spatial resolution of the internal anatomy of the human body. However, standard CT reconstruction algorithms need a set of X-ray projections rotationally obtained around the patient, which are unavailable during the treatment. 
+
 Following these observations, we propose a method to reconstruct 3D CT from a single X-ray projection image. To summarize, we make the following contributions: 
+
 Fig. 1. The architecture of generator. 
+
 II. NETWORK ARCHITECTURE 
+
 Our network, used in reconstruction of volumetric computed tomography images from a single projection view, is similar to other GAN architectures, which involves a generator and a discriminator. 
+
 To perform reconstruction of volumetric computed tomography images from a single projection view, the design of our structure follows the conditional variational autoencoder framework. 
+
 Encoder In the encoder part, the information of 2D X-ray image is encoded. The encoder has 2 branch, one of which encodes the 3D CT samples and the other encodes the a 2D X-ray image as conditional variable. The outputs of each branch are concatenated and mapped to two separate fully-connected layers to generate {\textmu}(Y, X) and \ensuremath{\Sigma}(Y, X), which will be combined with \ensuremath{\Sigma} to create z. Dense connectivity [9] has a compelling advantage in the feature extraction process. To optimally utilize information from 2D X-ray images, we embed dense modules to generator{\textquoteright}s encoding path. Each dense module consists of a down-sampling block, a densely connected convolution block and a compressing block. The cascaded dense modules encode different level information of the input image and pass it to the decoder along different shortcut paths. 
+
 where DKL[a||b] = Ez\ensuremath{\sim}Q[log(a) \ensuremath{-} log(b))] represents the Kullback-Leibler(KL) divergence, Q(z|Y, X) = N(z|{\textmu}(Y, X), \ensuremath{\Sigma}(Y, X)) where {\textmu} and \ensuremath{\Sigma} are arbitrary, deterministic functions learned from the data. 
+
 Since P(z|X) \ensuremath{\sim} N(0, 1), this choice of Q(z|Y, X) allows us to compute DKL[Q(z|Y, X)||P(z|X)] as the KL-divergence between two Gaussian distribution, which has a closed-form solution. As Q is assumed as a high-capacity function which can approximate P(z|Y, X), DKL[Q(z|X, Y )||P(z|Y, X)] will tend to 0. Therefore, P(Y |X) can be directly optimized through optimizing the right hand side of (1) via stochastic gradient descent. During the training time, we use the reparameterization trick to make the sampling of z differentiable with respect to {\textmu} and \ensuremath{\Sigma}, and define zi = {\textmu}(Y i , Xi) + \ensuremath{\eta}\ensuremath{\Sigma}(Y i , Xi), where \ensuremath{\eta} \ensuremath{\sim} N(0, I).Based on equation (1), the reconstruction network can be implemented. The function Q takes the form of the encoder, encoding Y and X into a d-dimensional latent space z, via {\textmu} and \ensuremath{\Sigma}. 
+
 Fig. 2. The loss of network. 
+
 Decoder In the decoder part, the conditional dependency on X is explicitly modeled by the concatenation of z with the vector representation of X. Then, the fully connected layer{\textquoteright}s output is reshaped to 3D. Through the model-training process, the transformation module learns the underlying relationship between feature representations across dimension and reshape 2D features to 3D features, making it possible to generate a volumetric CT image from a 2D projection. However, as most of the 2D spatial information gets lost during such conversion, we use skip connection between the encoder and the decoder. It enforces the channel number of the encoder being equal to the one on the corresponding decoder side by a basic 2D convolution block, expand the 2D feature map to a pseudo3D one by duplicating the 2D information along the third axis and use a basic 3D convolution block to encode the pseudo-3D feature map. The abundant low-level information across two parts of the network imposes strong correlations on the shape and appearance between input and output. At test time, the decoder operates as a generative reconstruction network given the 2D X-ray image X, generating 3D CT volume by sampling z \ensuremath{\sim} N(0, I). In particular, we generate the highest-confidence prediction with z = 0. 
+
 PatchGANs [10] have been used frequently in recent works due to the good generalization property. We adopt a similar architecture in our discriminator network from 3D Patch Discriminator [10]. It consists of 3D convolution layer, instance normalization layer and rectified linear unit. The proposed discriminator architecture improves the discriminative capacity inherited from the PatchGAN framework and can distinguish real or fake 3D volumes. 
+
 III. LOSS FUNCTIONS 
+
 In this section, we introduce loss functions that are used to constrain the proposed network. 
+
 The intention of GAN is to learn deep generative models while avoiding approximating intractable probabilistic computations that arise in other strategies such as maximum likelihood estimation. In the learning procedure, a discriminator D and a generator G would compete with each other to learn a generator distribution pG(x) that matches the real data distribution pdata(x). An ideal generator could generate samples that are indistinguishable from the real samples by the discriminator. More formally, the minmax game is summarized by the following expression: 
+
 (2) 
+
 where z is sampled from a noise distribution. 
+
 To learn a non-linear mapping from X-rays to CT, the generated CT volume should be consistent with the semantic information provided by the input X-rays. Therefore, LSGAN [11] is more suitable for our task. The conditional LSGAN loss is defined as: 
+
 (3) 
+
 In conditional variational autoencoder, Kullback-Leibler divergence constrains the distribution of hidden variables. Since the conditional distribution is defined as a multidimensional Gaussian distribution N(0, I), the KL loss is defined as [7]: 
+
 (5) 
+
 The conditional adversarial loss can not guarantee that the output generated by generator has the structural consistency with the input. Moreover, CT scans require higher precision of internal structures in 3D. Consequently, to enforce the reconstructed CT to be voxel-wise close to the ground truth, the reconstruction loss is defined as MSE [1]: 
+
 (6) 
+
 To improve the training efficiency, simple shape priors could be utilized as auxiliary regularizations. Therefore, 2D projections of the predicted volume are enforced to match the ones from corresponding ground-truth on axial, coronal and sagittal planes. As this auxiliary loss focuses only on the general shape consistency, it can use orthogonal projections instead of perspective projections to simplify the process. The proposed projection loss is defined as [6]: 
+
 (7) 
+
 where the Pax, Pco and Psa represent the projection in the axial, coronal and sagittal plane, respectively. The L1 distance is used to enforce sharper image boundaries. 
+
 Given the definitions of the adversarial loss, KL loss, reconstruction loss and projection loss, the final loss function is formulated as: 
+
 (8) 
+
 where \ensuremath{\lambda}1, \ensuremath{\lambda}2 and \ensuremath{\lambda}3 control the relative importance of different loss terms. In reconstruction of 3D CT from X-ray projection, the adversarial loss is important to encourage local realism of the synthesized CT, but global shape consistency should be prioritized during the optimization process. 
+
 IV. EXPERIMENTS 
+
 In this section, we introduce an augmented dataset built on a ten-phase lung 4D CT scan of two patients. We evaluate the proposed model with several widely used metrics, e.g., peak signaltonoise ratio (PSNR) and structural similarity (SSIM). To demonstrate the effectiveness of our method, we compare our method with other methods including PatRecon and X2CT. Fair comparisons and comprehensive analysis are given to demonstrate the improvement of our proposed method. 
+
 As there is no large dataset with paired 2D X-ray projection images and corresponding 3D CT, we use real 3D CT to synthesize corresponding X-ray projections through digitally reconstructed radiographs technology [12]. 
+
 To be specific, two ten-phase lung 4D CT scans of two patients for radiation therapy treatment planning are selected. The tumor diameter of patient 1 is about 40mm, and the tumor diameter of patient 2 is about 10mm, which represents large tumors and small tumors respectively. For each patients, a respiratory motion model based on principal component analysis (PCA) is constructed, which can described anatomical deformation induced by breathing using a linear combination of principal components and corresponding coefficients. Then, 1080 3D-CTs in different phases are generated by sampling the PCA coefficients. Next, to avoid the difficulty of reconstruction of 3D CT from 2D X-ray projection caused by the heterogeneous of imaging protocols, we first resample the CT scans to 1{\texttimes}1{\texttimes}1 mm3 resolution. Then, a cubic area is cropped from each CT scan. For each 3D CT, we synthesize corresponding X-rays from four different projection angles (ie, 0{\textdegree}, 30{\textdegree}, 60{\textdegree}, and 90{\textdegree}). Among all the paired data of CT-DRR, 60\% are selected for training, 20\% for verification, and the rest 20\% for testing. Pytorch [13] is used to build a neural network, and Adam [14] is used as the network optimizer. 
+
 MAE Mean Absolute Error(MAE) is L1-norm error between the reconstructed image and the real image, which is commonly used to estimate the difference between the prediction and groundtruth images. 
+
 PSNR Peak Signal-to-Noise Ratio(PSNR) is often used to measure the quality of reconstructed image. Conventionally, CT value is recorded with 12 bits, representing a range of [0, 4095] (the actual Hounsfield unit equals the CT value minus 1024), which makes PSNR an ideal criterion for image quality evaluation. 
+
 SSIM Structural SIMilarity(SSIM) is a metric of the overall similarity of two images, including brightness, contrast and structure. SSIM can match human{\textquoteright}s subjective evaluation better. 
+
 The visible results of CT reconstruction are shown in 3. From the visual quality evaluation, it is obvious that the proposed method can reconstruct a complete 3D CT from a 
+
 Fig. 3. CT scans reconstructed from DRRs from different projection angles. 
+
 single X-ray projection image from various angles, accurately reconstruct the tiny anatomical structure and obtain a clear image boundary. It can be seen from the figure that the 0{\textdegree} X-ray projection can reconstruct the 3D CT better. The possible reason is that body thickness along the sagittal axis is smaller than body thickness along other axes and the visibility of the 0{\textdegree} X-ray projection is better. 
+
 Quantitative results are summarized in Table 1. Compared with the existing X2CT [6] and PatRecon [1], the proposed method has lower mean absolute error, higher peak signal-to-noise ratio and structure similarity, which represent higher reconstruction accuracy. Moreover, by tuning the weights of the voxel-level MSE loss and semantic-level adversarial loss in cost function, we can make a reasonable trade-off between the visual image quality and qualitative results. 
+
 V. CONCLUSIONS 
+
 In this paper, we explored the possibility of reconstructing a 3D CT scan from a single 2D X-rays at different projection angles in an end to end network. In order to solve this challenging task, we use a variational autoencoder to learn the features of the input 2D X-ray projection image, and construct a decoder for 3D CT reconstruction. Moreover, a GAN structure is adopted to make the generated 3D CT more realistic. Experiments have proved that this method can obtain accurate 3D CT using a single X-ray projection image. The proposed method can be used for tumor motion control and dynamic dose assessment of radiotherapy, which has high application value. 
+
 ACKNOWLEDGMENT 
+
 This work was supported by the National Key R\&D Program of China under Grant No. 2018YFA0704100 and 2018YFA0704101, the National Natural Science Foundation of China under Grant Nos. 61601012. 
+
 REFERENCES 

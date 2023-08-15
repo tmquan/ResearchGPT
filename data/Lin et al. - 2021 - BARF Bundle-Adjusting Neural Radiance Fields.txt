@@ -1,103 +1,205 @@
 BARF : Bundle-Adjusting Neural Radiance Fields 
+
 1. Introduction 
+
 Humans have strong capabilities of reasoning about 3D geometry through our vision from the slightest ego-motion. When watching movies, we can immediately infer the 3D spatial structures of objects and scenes inside the videos. This is because we have an inherent ability of associating spatial correspondences of the same scene across continuous observations, without having to make sense of the relative camera or ego-motion. Through pure visual perception, not only can we recover a mental 3D representation of what we are looking at, but meanwhile we can also recognize where we are looking at the scene from. 
+
 Simultaneously solving for the 3D scene representation from RGB images (i.e. reconstruction) and localizing the given camera frames (i.e. registration) is a long-standing chicken-and-egg problem in computer vision {\textemdash} recovering 
+
 NeRF 
+
 BARF (ours) 
+
 Figure 1: Training NeRF requires accurate camera poses for all images. We present BARF for learning 3D scene representations from imperfect (or even unknown) camera poses by jointly optimizing for registration and reconstruction. 
+
 the 3D structure requires observations with known camera poses, while localizing the cameras requires reliable correspondences from the reconstruction. Classical methods such as structure from motion (Sf M) [17, 44] or SLAM [13, 32] approach this problem through local registration followed by global geometric bundle adjustment (BA) on both the structure and cameras. Sf M and SLAM systems, however, are sensitive to the quality of local registration and easily fall into suboptimal solutions. In addition, the sparse nature of output 3D point clouds (often noisy) limits downstream vision tasks that requires dense geometric reasoning. 
+
 Closely related to 3D reconstruction from imagery is the problem of view synthesis. Though not primarily purposed for recovering explicit 3D structures, recent advances on photorealistic view synthesis have opted to recover an intermediate dense 3D-aware representation (e.g. depth [15, 61], multi-plane images [71, 51, 55], or volume density [27, 31]), followed by neural rendering techniques [14, 29, 47, 54] to 
+
 synthesize the target images. In particular, Neural Radiance Fields (NeRF) [31] have demonstrated its remarkable ability for high-fidelity view synthesis. NeRF encodes 3D scenes with a neural network mapping 3D point locations to color and volume density. This allows the scenes to be represented with compact memory footprint without limiting the resolution of synthesized images. The optimization process of the network is constrained to obey the principles of classical volume rendering [23], making the learned representation interpretable as a continuous 3D volume density function. 
+
 Despite its notable ability for photorealistic view synthesis and 3D scene representation, a hard prerequisite of NeRF (as well as other view synthesis methods) is accurate camera poses of the given images, which is typically obtained through auxiliary off-the-shelf algorithms. One straightforward way to circumvent this limitation is to additionally optimize the pose parameters with the NeRF model via back-propagation. As discussed later in the paper, however, na{\"\i}ve pose optimization with NeRF is sensitive to initialization. It may lead to suboptimal solutions of the 3D scene representation, degrading the quality of view synthesis. 
+
 In this paper, we address the problem of training NeRF representations from imperfect camera poses {\textemdash} the joint problem of reconstructing the 3D scene and registering the camera poses (Fig. 1). We draw inspiration from the success of classical image alignment methods and establish a theoretical connection, showing that coarse-to-fine registration is also critical to NeRF. Specifically, we show that positional encoding [57] of input 3D points plays a crucial role {\textemdash} as much as it enables fitting to high-frequency functions [53], positional encoding is also more susceptible to suboptimal registration results. To this end, we present Bundle-Adjusting NeRF (BARF), a simple yet effective strategy for coarse-to-fine registration on coordinate-based scene representations. BARF can be regarded as a type of photometric BA [8, 2, 26] using view synthesis as the proxy objective. Unlike traditional BA, however, BARF can learn scene representations from scratch (i.e. from randomly initialized network weights), lifting the reliance of local registration subprocedures and allowing for more generic applications. 
+
 In summary, we present the following contributions: 
+
 2. Related Work 
+
 Structure from motion (SfM) and SLAM. Given a set of input images, Sf M [37, 38, 48, 49, 1, 62] and SLAM [33, 13, 32, 64] systems aim to recover the 3D structure and the sensor poses simultaneously. These can be classified into (a) indirect methods that rely on keypoint detection and matching [6, 32] and (b) direct methods that exploit photometric consistency [2, 12]. Modern pipelines following the indirect route have achieved tremendous success [44]; however, they often suffer at textureless regions and repetitive patterns, where distinctive keypoints cannot be reliably detected. Researchers have thus sought to use neural networks to learn discriminative features directly from data [10, 35, 11]. 
+
 Direct methods, on the other hand, do not rely on such distinctive keypoints {\textemdash} every pixel can contribute to maximizing photometric consistency, leading to improved robustness in sparsely textured environments [59]. They can also be naturally integrated into deep learning frameworks through image reconstruction losses [70, 58, 66]. Our method BARF lies under the broad umbrella of direct methods, as BARF learns 3D scene representations from RGB images while also localizing the respective cameras. However, unlike classical Sf M and SLAM that represent 3D structures with explicit geometry (e.g. point clouds), BARF encodes the scenes as coordinate-based representations with neural networks. 
+
 View synthesis. Given a set of posed images, view synthesis attempts to simulate how a scene would look like from novel viewpoints [5, 24, 52, 19]. The task has been closely tied to 3D reconstruction since its introduction [7, 72, 18]. Researchers have investigated blending pixel colors based on depth maps [4] or leveraging proxy geometry to warp and composite the synthesized image [22]. However, since the problem is inherently ill-posed, there are still multiple restrictions and assumptions on the synthesized viewpoints. 
+
 State-of-the-art methods have capitalized on neural networks to learn both the scene geometry and statistical priors from data. Various representations have been explored in this direction, e.g. depth [15, 61, 42, 43], layered depth [56, 46], multi-plane images [71, 51, 55], volume density [27, 31], and mesh sheets [20]. Unfortunately, these view synthesis methods still require the camera poses to be known a priori, largely limiting their applications in practice. In contrast, our method BARF is able to effectively learn 3D representations that encodes the underlying scene geometry from imperfect or even unknown camera poses. 
+
 Neural Radiance Fields (NeRF). Recently, Mildenhall et al. [31] proposed NeRF to synthesize novel views of static, complex scenes from a set of posed input images. The key idea is to model the continuous radiance field of a scene with a multi-layer perceptron (MLP), followed by differentiable volume rendering to synthesize the images and backpropa-gate the photometric errors. NeRF has drawn wide attention 
+
 across the vision community [68, 34, 40, 36, 65] due to its simplicity and extraordinary performance. It has also been extended on many fronts, e.g. reflectance modeling for pho-torealistic relighting [3, 50] and dynamic scene modeling that integrates the motion of the world [25, 63, 39]. Recent works have also sought to exploit a large corpus of data to pretrain the MLP, enabling the ability to infer the radiance field from a single image [16, 67, 41, 45]. 
+
 While impressive results have been achieved by the above NeRF-based models, they have a common drawback {\textemdash} the requirement of posed images. Our proposed BARF allows us to circumvent such requirement. We show that with a simple coarse-to-fine bundle adjustment technique, we can recover from imperfect camera poses (including unknown poses of video sequences) and learn the NeRF representation simultaneously. Concurrent to our work, NeRF--[60] introduced an empirical, two-stage pipeline to estimate unknown camera poses. Our method BARF, in contrast, is motivated by mathematical insights and can recover the camera poses within a single course of optimization, allowing for direct utilities for various NeRF applications and extensions. 
+
 3. Approach 
+
 We unfold this paper by motivating with the simpler 2D case of classical image alignment as an example. Then we discuss how the same concept is also applicable to the 3D case, giving inspiration to our proposed BARF. 
+
 Let x \ensuremath{\in} R2 be the 2D pixel coordinates and I : R2 {\textrightarrow} R3 be the imaging function. Image alignment aims to find the relative geometric transformation which minimizes the photometric error between two images I1 and I2. The problem can be formulated with a synthesis-based objective: 
+
 (1) 
+
 where W : R2 {\textrightarrow} R2 is the warp function parametrized by p \ensuremath{\in} RP (with P as the dimensionality). As this is a nonlinear problem, gradient-based optimization is the method of choice: given the current warp state p, warp updates \ensuremath{\Delta}p are iteratively solved for and updated to the solution via p {\textleftarrow} p + \ensuremath{\Delta}p. Here, \ensuremath{\Delta}p can be written in a generic form of 
+
 where is termed the steepest descent image, and A is a generic transformation which depends on the choice of the optimization algorithm. The seminal Lucas-Kanade ternatively, one could also choose first-order optimizers such 
+
 Figure 2: Predicting alignment from signal differences. Consider two 1D signals where f1(x) = f2(x + c) differs by an offset c. When solving for alignment, smoother signals can predict more coherent displacements than complex signals, which easily results in suboptimal alignment. 
+
 as (stochastic) gradient descent which can be more naturally incorporated into modern deep learning frameworks, where A would correspond to a scalar learning rate. 
+
 The steepest descent image J can be expanded as 
+
 (3) 
+
 At the heart of gradient-based registration are the image gradients modeling a local per-pixel linear relationship between appearance and spatial displacements, which is classically estimated via finite differencing. The overall warp update \ensuremath{\Delta}p can be more effectively estimated from pixel value differences if the per-pixel predictions are coherent (Fig. 2), i.e. the image signals are smooth. However, as natural images are typically complex signals, gradient-based registration on raw images is susceptible to suboptimal solutions if poorly initialized. Therefore, coarse-to-fine strategies have been practiced by blurring the images at earlier stages of registration, effectively widening the basin of attraction and smoothening the alignment landscape. 
+
 Images as neural networks. An alternative formulation of the problem is to learn a coordinate-based image representation with a neural network while also solving for the warp p. Writing the network as f : R2 {\textrightarrow} R3 and denoting \ensuremath{\Theta} as its parameters, one can instead choose to optimize the objective 
+
 or alternatively, one may choose to solve for warp parameters 
+
 p1 and p2 respectively for both images I1 and I2 through 
+
 where M = 2 is the number of images. Albeit similar to (1), the image gradients become the analytical Jacobian of the network instead of numerical estimation. By manipulating the network f, this also enables more principled control of the signal smoothness for alignment without having to rely on heuristic blurring on images, making these forms generalizable to 3D scene representations (Sec. 3.2). 
+
 We discuss the 3D case of recovering the 3D scene representation from Neural Radiance Fields (NeRF) [31] jointly with the camera poses. To signify the analogy to Sec. 3.1, we deliberately overload the notations x as 3D points, W as camera pose transformations, and f as the network in NeRF. 
+
 NeRF encodes a 3D scene as a continuous 3D representation using an MLP f : R3 {\textrightarrow} R4 to predict the RGB color c \ensuremath{\in} R3 and volume density \ensuremath{\sigma} \ensuremath{\in} R for each input 3D point x \ensuremath{\in} R3 . This can be summarized as y = [c; \ensuremath{\sigma}] = f(x; \ensuremath{\Theta}), where \ensuremath{\Theta} is the network parameters1 . NeRF assumes an emission-only model, i.e. the rendered color of a pixel is dependent only on the emitted radiance of 3D points along the viewing ray, without considering external lighting factors. 
+
 We first formulate the rendering operation of NeRF in the camera view space. Given pixel coordinates u \ensuremath{\in} R2 and denoting its homogeneous coordinates as u{\textasciimacron} = [u; 1] \ensuremath{\in} R3 , we can express a 3D point xi along the viewing ray at depth zi as xi = ziu{\textasciimacron}. The RGB color I{\textasciicircum} at pixel location u is extracted by volume rendering via 
+
 (6) 
+
 where and znear and zfar are bounds on the depth range of interest. We refer our readers to Levoy [23] and Mildenhall et al. [31] for a more detailed treatment on volume rendering. In practice, the above integral formulations are approximated numerically via quadrature on discrete N points at depth \{z1,...,zN \} sampled along the ray. This involves N evaluations of the network f, whose output \{y1,...,yN \} are further composited through volume rendering. We can summarize the ray compositing function as and rewrite as Note that g is differentiable but deterministic, i.e. there are no learnable parameters associated. 
+
 Under a 6-DoF camera pose parametrized by p \ensuremath{\in} R6 , a 3D point x in the camera view space can be transformed to 
+
 the 3D world coordinates through a 3D rigid transformation W : R3 {\textrightarrow} R3 . Therefore, the synthesized RGB value at pixel u becomes a function of the camera pose p as 
+
 Given M images \{Ii\}M i=1, our goal is to optimize NeRF and the camera poses \{pi\}iM=1 over the synthesis-based objective 
+
 where I{\textasciicircum} also depends on the network parameters \ensuremath{\Theta}. 
+
 One may notice the analogy between the synthesis-based objectives of 2D image alignment (5) and NeRF (8). Similarly, we can also derive the {\textquotedblleft}steepest descent image{\textquotedblright} as 
+
 which is formed via backpropagation in practice. The lin-earization (9) is also analogous to the 2D case of (3), where the Jacobian of the network \ensuremath{\partial}\ensuremath{\partial}xy = \ensuremath{\partial}f\ensuremath{\partial}(xx) linearly relates the change of color c and volume density \ensuremath{\sigma} with 3D spatial displacements. To solve for effective camera pose updates \ensuremath{\Delta}p through backpropagation, it is also desirable to control the smoothness of f for predicting coherent geometric displacements from the sampled 3D points \{x1,...,xN \}. 
+
 The key of enabling NeRF to synthesize views with high fidelity is positional encoding [57], a deterministic mapping of input 3D coordinates x to higher dimensions of different sinusoidal frequency bases2 . We denote \ensuremath{\gamma} : R3 {\textrightarrow} R3+6L as the positional encoding with L frequency bases, defined as 
+
 where the k-th frequency encoding \ensuremath{\gamma}k(x) is 
+
 (11) 
+
 with the sinusoidal functions operating coordinate-wise. The special case of L = 0 makes \ensuremath{\gamma} an identity mapping function. The network f is thus a composition of f(x) = f {\textopenbullet} \ensuremath{\gamma}(x), where f is the subsequent learnable MLP. Positional encoding allows coordinate-based neural networks, which are typically bandwidth limited, to represent signals of higher frequency with faster convergence behaviors [53]. 
+
 The Jacobian of the k-th positional encoding \ensuremath{\gamma}k is 
+
 (12) 
+
 which amplifies the gradient signals from the MLP f by 2k\ensuremath{\pi} with its direction changing at the same frequency. This makes it difficult to predict effective updates \ensuremath{\Delta}p, since gradient signals from the sampled 3D points are incoherent (in terms of both direction and magnitude) and can easily cancel out each other. Therefore, na{\"\i}vely applying positional encoding can become a double-edged sword to NeRF for the task of joint registration and reconstruction. 
+
 We describe our proposed BARF, a simple yet effective strategy for coarse-to-fine registration for NeRF. The key idea is to apply a smooth mask on the encoding at different frequency bands (from low to high) over the course of optimization, which acts like a dynamic low-pass filter. Inspired by recent work of learning coarse-to-fine deformation flow fields [36], we weigh the k-th frequency component of \ensuremath{\gamma} as 
+
 (13) 
+
 and \ensuremath{\alpha} \ensuremath{\in} [0,L] is a controllable parameter proportional to the optimization progress. The Jacobian of \ensuremath{\gamma}k thus becomes 
+
 When wk(\ensuremath{\alpha}) = 0, the contribution to the gradient from the k-th (and higher) frequency component is nullified. 
+
 Starting from the raw 3D input x (\ensuremath{\alpha} = 0), we gradually activate the encodings of higher frequency bands until full positional encoding is enabled (\ensuremath{\alpha} = L), equivalent to the original NeRF model. This allows BARF to discover the correct registration with an initially smooth signal and later shift focus to learning a high-fidelity scene representation. 
+
 4. Experiments 
+
 We validate the effectiveness of our proposed BARF with a simple experiment of 2D planar image alignment, and show how the same coarse-to-fine registration strategy can be generalized to NeRF [31] for learning 3D scene representations. 
+
 Experimental settings. We investigate how positional encoding impacts this problem by comparing networks with na{\"\i}ve (full) positional encoding and without any encoding. We use a simple ReLU MLP for f with four 256-dimensional hidden units, and we use the Adam optimizer [21] to optimize both the network weights and the warp parameters for 5000 iterations with a learning rate of 0.001. For BARF, we linearly adjust \ensuremath{\alpha} for the first 2000 iterations and activate all frequency bands (L = 8) for the remaining iterations. 
+
 Results. We visualize the registration results in Fig. 4. Alignment with full positional encoding results in suboptimal registration with ghostly artifacts in the recovered image representation. On the other hand, alignment without positional encoding achieves decent registration results, but cannot recover the image with sufficient fidelity. BARF discovers the precise geometric warps with the image representation optimized with high fidelity, quantitatively reflected in Table 1. The image alignment experiment demonstrates the general advantage of BARF for coordinate-based representations. 
+
 We investigate the problem of learning 3D scene representations with Neural Radiance Fields (NeRF) [31] from imperfect camera poses. We experiment with the 8 synthetic object-centric scenes provided by Mildenhall et al. [31], which consists of M = 100 rendered images with ground-truth camera poses for each scene for training. 
+
 Experimental settings. We parametrize the camera poses p with the se(3) Lie algebra and assume known intrinsics. For each scene, we synthetically perturb the camera poses with additive noise \ensuremath{\delta}p \ensuremath{\sim} N (0,0.15I), which corresponds to a standard deviation of 14.9{\textdegree} in rotation and 0.26 in translational magnitude (Fig. 5(a)). We optimize the objective in (8) jointly for the scene representation and the camera poses. We evaluate BARF mainly against the original NeRF model with na{\"\i}ve (full) positional encoding; for completeness, we also compare with the same model without positional encoding. 
+
 Implementation details. We follow the architectural settings from the original NeRF [31] with some modifications. We train a single MLP with 128 hidden units in each layer and without additional hierarchical sampling for simplicity. We resize the images to 400 {\texttimes} 400 pixels and randomly sample 1024 pixel rays at each optimization step. We choose N = 128 sample for numerical integration along each ray, and we use the softplus activation on the volume density output \ensuremath{\sigma} for improved stability. We use the Adam optimizer and train all models for 200K iterations, with a learning rate of 5{\texttimes}10\ensuremath{-}4 exponentially decaying to 1{\texttimes}10\ensuremath{-}4 for the network f and 1{\texttimes}10\ensuremath{-}3 decaying to 1{\texttimes}10\ensuremath{-}5 for the poses p. For 
+
 (a) image patches given for optimization 
+
 (c) ground-truth warps 
+
 Figure 3: Given image patches color-coded in (a), we aim to recover the alignment and the neural representation of the entire image, with the patches initialized to center crops shown in (b) and the corresponding ground-truth warps shown in (c). 
+
 Table 1: Quantitative results of planar image alignment. BARF optimizes for more accurate alignment and patch reconstruction compared to the baselines. 
+
 (a) na{\"\i}ve pos. enc. 
+
 (b) w/o pos. enc. 
+
 (c) BARF 
+
 Figure 4: Qualitative results of the planar image alignment experiment. We visualize the optimized warps (top row), the patch reconstructions in corresponding colors (middle row), and recovered image representation from f (bottom row). BARF is able to recover accurate alignment and high-fidelity image reconstruction, while baselines result in suboptimal alignment with na{\"\i}ve positional encoding and blurry reconstruction without any encoding. Best viewed in color. 
+
 (a) initial camera poses 
+
 (b) full positional encoding 
+
 perturbed/optimized camera poses 
+
 translational error 
+
 (c) BARF (ours) 
+
 Figure 5: Visual comparison of the initial and optimized camera poses (Procrustes aligned) for the chair scene. BARF successfully realigns all the camera frames while NeRF na{\"\i}ve positional encoding gets stuck at suboptimal solutions. 
+
 BARF, we linearly adjust \ensuremath{\alpha} from iteration 20K to 100K and activate all frequency bands (up to L = 10) subsequently. 
+
 Evaluation criteria. We measure the performance in two aspects: pose error for registration and view synthesis quality for the scene representation. Since both the scene and camera poses are variable up to a 3D similarity transformation, we evaluate the quality of registration by pre-aligning the optimized poses to the ground truth with Procrustes analysis on the camera locations. For evaluating view synthesis, we run an additional step of test-time photometric optimization on the trained models [26, 65] to factor out the pose error that may contaminate the view synthesis quality. We report the average rotation and translation errors for pose and PSNR, SSIM and LPIPS [69] for view synthesis. 
+
 Results. We visualize the results in Fig. 6 and report the quantitative results in Table 2. BARF takes the best of both worlds of recovering the neural scene representation with the camera pose successfully registered, while na{\"\i}ve NeRF with full positional encoding finds suboptimal solutions. Fig. 5 shows that BARF can achieve near-perfect registration for the synthetic scenes. Although the NeRF model without positional encoding can also successfully recover alignment, the learned scene representations (and thus the synthesized images) lack the reconstruction fidelity. As a reference, we also compare the view synthesis quality against standard NeRF models trained under ground-truth poses, showing that BARF can achieve comparable view synthesis quality in all metrics, albeit initialized from imperfect camera poses. 
+
 ground truth 
+
 full pos. enc. 
+
 w/o pos. enc. 
+
 BARF (ours) 
+
 Figure 6: Qualitative results of NeRF on synthetic scenes. We visualize the image synthesis (top) and the expected depth through ray compositing (bottom). BARF achieves comparable synthesis quality to the reference NeRF (trained under perfect camera poses), while full positional encoding results in suboptimal registration, leading to synthesis artifacts. 
+
 reference NeRF 
+
 Table 2: Quantitative results of NeRF on synthetic scenes. BARF successfully optimizes for camera registration (with less than 0.2{\textdegree} rotation error) while still consistently achieving high-quality view synthesis that is comparable to the reference NeRF models (trained under perfect camera poses). Translation errors are scaled by 100. 
+
 We investigate the challenging problem of learning neural 3D representations with NeRF on real-world scenes, where the camera poses are unknown. We consider the LLFF dataset [30], which consists of 8 forward-facing scenes with RGB images sequentially captured by hand-held cameras. 
+
 Experimental settings. We parametrize the camera poses p with se(3) following Sec. 4.2 but initialize all cameras with the identity transformation, i.e. pi = 0 \ensuremath{\forall}i. We assume known camera intrinsics (provided by the dataset). We compare against the original NeRF model with na{\"\i}ve positional encoding, and we use the same evaluation criteria described in Sec. 4.2. However, we note that the camera poses provided in LLFF are also estimations from Sf M packages [44]; therefore, the pose evaluation is at most an indication of how well BARF agrees with classical geometric pose estimation. 
+
 Implementation details. We follow the same architectural settings from the original NeRF [31] and resize the images to 480{\texttimes}640 pixels. We train all models for 200K iterations and randomly sample 2048 pixel rays at each optimization step, with a learning rate of 1{\texttimes}10\ensuremath{-}3 for the network f decaying to 1{\texttimes}10\ensuremath{-}4 , and 3{\texttimes}10\ensuremath{-}3 for the pose p decaying to 1{\texttimes}10\ensuremath{-}5 . We linearly adjust \ensuremath{\alpha} for BARF from iteration 20K to 100K and activate all bands (up to L = 10) subsequently. 
+
 Results. The quantitative results (Table 3) show that the recovered camera poses from BARF highly agrees with those estimated from off-the-shelf Sf M methods (visualized in Fig. 8), demonstrating the ability of BARF to localize from scratch. Furthermore, BARF can successfully recover the 3D scene representation with high fidelity (Fig. 7). In contrast, NeRF with na{\"\i}ve positional encoding diverge to incorrect camera poses, which in turn results in poor view synthesis. This highlights the effectiveness of BARF utilizing a coarse-to-fine strategy for joint registration and reconstruction. 
+
 Figure 7: Qualitative results of NeRF on real-world scenes from unknown camera poses. Compared to a reference NeRF model trained with camera poses provided from Sf M [44], BARF can effectively optimize for the poses jointly with the scene representation. NeRF models with full positional encoding diverge to incorrect localization and hence poor synthesis quality. 
+
 Table 3: Quantitative results of NeRF on the LLFF forward-facing scenes from unknown camera poses. BARF can optimize for accurate camera poses (with an average \ensuremath{<} 0.6{\textdegree} rotation error) and high-fidelity scene representations, enabling novel view synthesis whose quality is comparable to reference NeRF model trained under Sf M poses. Translation errors are scaled by 100. 
+
 (a) full pos. enc. 
+
 (b) BARF (ours) 
+
 Figure 8: Visualization of optimized camera poses from the fern scene (Procrustes aligned). Results from BARF highly agrees with Sf M, whereas the baseline poses are suboptimal. 
+
 5. Conclusion 
+
 We present Bundle-Adjusting Neural Radiance Fields (BARF), a simple yet effective strategy for training NeRF from imperfect camera poses. By establishing a theoretical connection to classical image alignment, we demonstrate that coarse-to-fine registration is necessary for joint registration and reconstruction with coordinate-based scene representations. Our experiments show that BARF can effectively learn the 3D scene representations from scratch and resolve large camera pose misalignment at the same time. 
+
 Despite the intriguing results at the current stage, BARF has similar limitations to the original NeRF formulation [31] (e.g. slow optimization and rendering, rigidity assumption, sensitivity to dense 3D sampling), as well as reliance on heuristic coarse-to-fine scheduling strategies. Nevertheless, since BARF keeps a close formulation to NeRF, many of the latest advances on improving NeRF are potentially transferable to BARF as well. We believe BARF opens up exciting avenues for rethinking visual localization for Sf M/SLAM systems and self-supervised dense 3D reconstruction frameworks using view synthesis as a proxy objective. 
+
 References 

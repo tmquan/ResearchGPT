@@ -1,66 +1,131 @@
 X2CT-GAN: Reconstructing CT from Biplanar X-Rays with Generative Adversarial Networks 
+
 Computed tomography (CT) can provide a 3D view of the patient{\textquoteright}s internal organs, facilitating disease diagnosis, but it incurs more radiation dose to a patient and a CT scanner is much more cost prohibitive than an X-ray machine too. Traditional CT reconstruction methods require hundreds of X-ray projections through a full rotational scan of the body, which cannot be performed on a typical X-ray machine. In this work, we propose to reconstruct CT from two orthogonal X-rays using the generative adversarial network (GAN) framework. A specially designed generator network is exploited to increase data dimension from 2D (X-rays) to 3D (CT), which is not addressed in previous research of GAN. A novel feature fusion method is proposed to combine information from two X-rays. The mean squared error (MSE) loss and adversarial loss are combined to train the generator, resulting in a high-quality CT volume both visually and quantitatively. Extensive experiments on a publicly available chest CT dataset demonstrate the effectiveness of the proposed method. It could be a nice enhancement of a low-cost X-ray machine to provide physicians a CT-like 3D volume in several niche applications. 
+
 1. Introduction 
+
 Immediately after its discovery by Wilhelm Rntgen in 1895, X-ray found wide applications in clinical practice. It is the first imaging modality enabling us to non-invasively see through a human body and diagnose changes of internal anatomies. However, all tissues are projected onto a 2D image, overlaying each other. While bones are clearly visible, soft tissues are often difficult to discern. Computed tomography (CT) is an imaging modality that reconstructs a 3D volume from a set of X-rays (usually, at least 100 images) captured in a full rotation of the X-ray apparatus around the body. One prominent advantage of CT is that tissues 
+
 Figure 1. Illustration of the proposed method. The network takes 2D biplanar X-rays as input and outputs a 3D CT volume. 
+
 are presented in the 3D space, which completely solves the overlaying issue. However, a CT scan incurs far more radiation dose to a patient (depending on the number of X-rays acquired for CT reconstruction). Moreover, a CT scanner is often much more cost prohibitive than an X-ray machine, making its less accessible in developing countries [37]. 
+
 The purpose of this work is not to replace CT with X-rays. Though the proposed method can reconstruct the general structure accurately, small anatomies still suffer from some artifacts. However, the proposed method may find some niche applications in clinical practice. For example, we can measure the size of major organs (e.g., lungs, heart, and liver) accurately, or diagnose ill-positioned organs on the reconstructed CT scan. It may also be used for dose planning in radiation therapy, or pre-operative planning and intra-operative guidance in minimally invasive intervention. It could be a nice enhancement of a low-cost X-ray machine as physicians may also get a CT-like 3D volume that has certain clinical values. 
+
 Though the proposed network can also be used to reconstruct CT from a single X-ray, we argue that using bipla-nar X-rays is a more practical solution. First, CT reconstruction from a single X-ray subjects to too much ambiguity while biplanar X-rays offer additional information from both views that is complementary to each other. More accurate results, 4 dB improvement in peak signal-to-noise ratio (PSNR), are achieved in our comparison experiment. Second, biplanar X-ray machines are already clinically available, which can capture two orthogonal X-ray images simultaneously. And, it is also clinically practicable to capture two orthogonal X-rays with a mono-planar machine, by rotating the X-ray apparatus to a new orientation for the second X-ray imaging. 
+
 One practical issue to train X2CT-GAN is lacking of paired X-ray and CT 1 . It is expensive to collect such paired data from patients and it is also unethical to subject patients to additional radiation doses. In this work, we train the network with synthesized X-rays generated from large public-available chest CT datasets [1]. Given a CT volume, we simulate two X-rays, one from the posterior-anterior (PA) view and the other from the lateral view, using the digitally reconstructed radiographs (DRR) technology [28]. Although DRR synthesized X-rays are quite photo-realistic, there still exits a gap between real and synthesized X-rays, especially in finer anatomy structures, e.g., blood vessels. Therefore we further resort CycleGAN [41] to learn the genuine X-ray style that can be transferred to the synthesized data. More information about the style transfer operation can be found in supplement materials. 
+
 Figure 2. Overview of the X2CT-GAN model. RL and PL are abbreviations of the reconstruction loss and projection loss. 
+
 To summarize, we make the following contributions: 
+
 2. Related Work 
+
 Cross-Modality Transfer A DL based model often suffers from lacking enough training data so as to fall into a suboptimal point during training or even overfit the small dataset. To alleviate this problem, synthetic data has been used to boost the training process [33, 39]. So synthesizing realistic images close to the target distribution is a critic premise. Previous research such as pix2pix [17] could do the pixel level image to image transfer and CycleGAN [41] has the ability to learn the mapping between two unpaired datasets. In medical imaging community, quite some efforts have been put into this area to transfer a source modality to a target modality, e.g., 3T MRI to 7T MRI [3], MRI to CT [5, 30], MRI and CT bidirectional transfer [39] etc. Our approach differs from the previous cross-modality transfer works in two ways. First, in all the above works, the dimensions of the input and output are consistent, e.g., 2D to 
+
 Figure 3. Network architecture of the X2CT-GAN generator. Two encoder-decoder networks with the same architecture work in parallel for posterior-anterior (PA) and lateral X-rays, respectively. Another fusion network between these two encoder-decoder networks is responsible for fusing information coming from two views. For more details about Connection-A, B and C, please refer to Fig. 4. 
+
 2D or 3D to 3D. Here, we want to transfer 2D X-rays to a 3D volume. To handle this challenge, we propose X2CTGAN, which incorporates two mechanisms to increase the data dimension. Second, our goal is to reconstruct accurate 3D anatomy from biplanar X-rays with clinical values instead of enriching the training set. A photo-realistic image (e.g., one generated from pure noise input [11]) may already be beneficial for training. However, our application further requires the image to be anatomically accurate as well. 
+
 3. Objective Functions of X2CT-GAN 
+
 GAN [11] is a recent proposal to effectively train a generative model that has demonstrated the ability to capture real data distribution. Conditional GAN [29], as an extension of the original GAN, further improves the data generation process by conditioning the generative model on additional inputs, which could be class labels, partial data, or even data from a different modality. Inspired by the successes of conditional GANs, we propose a novel solution to train a generative model that can reconstruct a 3D CT volume from biplanar 2D X-rays. In this section, we first introduce several loss functions that are used to constrain the generative model. 
+
 The original intention of GAN is to learn deep generative models while avoiding approximating many intractable probabilistic computations that arise in other strategies, i.e., maximum likelihood estimation. The learning procedure is a two-player game, where a discriminator D and a generator G would compete with each other. The ultimate goal is to learn a generator distribution pG(x) that matches the real data distribution pdata(x). An ideal generator could generate samples that are indistinguishable from the real samples by the discriminator. More formally, the minmax game is summarized by the following expression: 
+
 (1) 
+
 where z is sampled from a noise distribution. 
+
 As we want to learn a non-linear mapping from X-rays to CT, the generated CT volume should be consistent with the semantic information provided by the input X-rays. After trying different mutants of the conditional GAN, we find out that LSGAN [27] is more suitable for our task and apply it to guide the training process. The conditional LSGAN loss is defined as: 
+
 where x is composed of two orthogonal biplanar X-rays, and y is the corresponding CT volume. Compared to the original objective function defined in Eq. (1), LSGAN replaces the logarithmic loss with a least-square loss, which helps to stabilize the adversarial training process and achieve more realistic details. 
+
 The conditional adversarial loss tries to make prediction look real. However, it does not guarantee that G can generate a sample maintaining the structural consistency with the input. Moreover, CT scans, different from natural images that have more diversity in color and shape, require higher precision of internal structures in 3D. Consequently, an additional constraint is required to enforce the reconstructed CT to be voxel-wise close to the ground truth. Some previous work has combined the reconstruction loss [32] with the adversarial loss and got positive improvements. We also follow this strategy and acquire a high PSNR as shown in Table 1. Our reconstruction loss is defined as MSE: 
+
 (3) 
+
 The aforementioned reconstruction loss is a voxel-wise loss that enforces the structural consistency in the 3D space. To improve the training efficiency, more simple shape priors could be utilized as auxiliary regularizations. Inspired by [18], we impel 2D projections of the predicted volume to match the ones from corresponding ground-truth in different views. Orthogonal projections, instead of perspective projections, are carried out to simplify the process as this auxiliary loss focuses only on the general shape consistency, not the X-ray veracity. We choose three orthogonal projection planes (axial, coronal, and sagittal, as shown in Fig. 2, following the convention in the medical imaging community). Finally, the proposed projection loss is defined as below: 
+
 (4) 
+
 where the Pax, Pco and Psa represent the projection in the axial, coronal, and sagittal plane, respectively. The L1 distance is used to enforce sharper image boundaries. 
+
 Given the definitions of the adversarial loss, reconstruction loss, and projection loss, our final objective function is formulated as: 
+
 (5) 
+
 4. Network Architecture of X2CT-GAN 
+
 In this section, we introduce our proposed network designs that are used in the 3D CT reconstruction task from 2D biplanar X-rays. Similar to other 3D GAN architectures, our method involves a 3D generator and a 3D discriminator. These two models are alternatively trained with the supervision defined in previous section. 
+
 The proposed 3D generator, as illustrated in Fig. 3, consists of three individual components: two encoder-decoder networks with the same architecture working in parallel for posterior-anterior (PA) and lateral X-rays respectively, and a fusion network. The encoder-decoder network aims to learn the mapping from the input 2D X-ray to the target 3D CT in the feature space, and the fusion network is responsible for reconstructing the 3D CT volume with the fused biplanar information from the two encoder-decoder networks. Since the training process in our reconstruction task involves circulating information between input and output from two different modalities and dimensionalities, several modifica-tions of the network architecture are made to adapt to the challenge. 
+
 Densely Connected Encoder Dense connectivity [15] has a compelling advantage in the feature extraction process. To optimally utilize information from 2D X-ray images, we embed dense modules to generator{\textquoteright}s encoding path. As shown in Fig. 3, each dense module consists of a down-sampling block (2D convolution with stride=2), a densely connected convolution block and a compressing block (output channels halved). The cascaded dense modules encode different level information of the input image and pass it to the decoder along different shortcut paths. 
+
 Bridging 2D Encoder and 3D Decoder Some existing encoder-decoder networks [17, 25] link encoder and decoder by means of convolution. There is no obstacle in a pure 2D or 3D encode-decode process, but our special 2D to 3D mapping procedure requires a new design to bridge the information from two dimensionalities. Motivated by [40], we extend fully connected layer to a new connection module, named Connection-A (Fig. 4a), to bridge the 2D encoder and 3D decoder in the middle of our generator. To better utilize skip connections in the 2D-3D generator, we design another novel connection module, named Connection-B (Fig. 4b), to shuttle low-level features from encoder to decoder. 
+
 To be more specific, Connection-A achieves the 2D-3D conversion through fully-connected layers, where the last encoder layer{\textquoteright}s output is flattened and elongated to a 1D 
+
 Figure 4. Different types of connections. Connection-A and Connection-B aim to increase dimensionality of feature maps, and Connection-C is for fusing information from two different views. 
+
 vector that is further reshaped to 3D. However, most of the 2D spatial information gets lost during such conversion so that we only use Connection-A to link the last encoder layer and first decoder layer. For the rest of skip connections, we use Connection-B and take following steps: 1) enforce the channel number of the encoder being equal to the one on the corresponding decoder side by a basic 2D convolution block; 2) expand the 2D feature map to a pseudo-3D one by duplicating the 2D information along the third axis; 3) use a basic 3D convolution block to encode the pseudo-3D feature map. The abundant low-level information shuttled across two parts of the network imposes strong correlations on the shape and appearance between input and output. 
+
 Feature Fusion of Biplanar X-rays As a common sense, a 2D photograph from frontal view could not retain lateral information of the object and vice versa. In our task, we resort biplanar X-rays captured from two orthogonal directions, where the complementary information could help the generative model achieve more accurate results. Two encoder-decoder networks in parallel extract features from each view while the third decoder network is set to fuse the extracted information and output the reconstructed volume. As we assume the biplanar X-rays are captured within a negligible time interval, meaning no data shift caused by patient motions, we can directly average the extracted features after transforming them into the same coordinate space, as shown in Fig. 4c. Any structural inconsistency between two decoders{\textquoteright} outputs will be captured by the fusion network and back-propagated to two networks. 
+
 The generator and discriminator are trained alternatively following the standard process [11]. We use the Adam solver [20] to train our networks. The initial learning rate of Adam is 2e-4, momentum parameters \ensuremath{\beta}1 =0.5 and \ensuremath{\beta}2 =0.99. After training 50 epochs, we adopt a linear learning rate decay policy to decrease the learning rate to 0. We train our model for a total of 100 epochs. 
+
 As instance normalization [34] has been demonstrated to be superior to batch normalization [16] in image generation tasks, we use instance normalization to regularize intermediate feature maps of our generator. At inference time, we observe that better generating results could be obtained if we use the statistics of the test batch itself instead of the running average of training batches, as suggested in [17]. Constrained by GPU memory limit, the batch size is set to one in all our experiments. 
+
 5. Experiments 
+
 In this section, we introduce an augmented dataset built on LIDC-IDRI [1]. We evaluate the proposed X2CT-GAN model with several widely used metrics, e.g., peak signal-to-noise ratio (PSNR) and structural similarity (SSIM) index. To demonstrate the effectiveness of our method, we reproduce a baseline model named 2DCNN [13]. Fair comparisons and comprehensive analysis are given to demonstrate the improvement of our proposed method over the baseline and other mutants. Finally, we show the real-world X-ray evaluation results of X2CT-GAN. Input images to X2CT-GAN are resized to 128 {\texttimes} 128 pixels, while the input of 2DCNN is 256 {\texttimes} 256 pixels as suggested by [13]. The output of all models is set to 128 {\texttimes} 128 {\texttimes} 128 voxels. 
+
 CT and X-ray Paired Dataset Ideally, to train and validate the proposed CT reconstruction approach, we need a large dataset with paired X-rays and corresponding CT reconstructions. Furthermore, the X-ray machine needs to be calibrated to get an accurate projection matrix. However, no such dataset is available and it is very costly to collect such real paired dataset. Therefore, we take a real CT volume 
+
 Figure 5. DRR [28] simulated X-rays. (a) and (c) are simulated PA view X-rays of two subjects, (b) and (d) are the corresponding lateral views. 
+
 and use the digitally reconstructed radiographs (DRR) technology [28] to synthesize corresponding X-rays, as shown in Fig. 5. It is much cheaper to collect such synthesized datasets to train our networks. To be specific, we use the publicly available LIDC-IDRI dataset [1], which contains 1,018 chest CT scans. The heterogeneous of imaging protocols result in different capture ranges and resolutions. For example, the number of slices varies a lot for different volumes. The resolution inside a slice is isotropic but also varies for different volumes. All these factors lead to a nontrivial reconstruction task from 2D X-rays. To simplify, we first resample the CT scans to the 1 {\texttimes} 1 {\texttimes} 1 mm3 resolution. Then, a 320 {\texttimes} 320 {\texttimes} 320 mm3 cubic area is cropped from each CT scan. We randomly select 916 CT scans for training and the rest 102 CT scans are used for testing. 
+
 Mapping from Real to Synthetic X-rays Although DRR synthetic X-rays are quite photo-realistic, there is still a gap between the real and synthetic X-rays, especially for those subtle anatomical structures, e.g., blood vessels. Since our networks are trained with synthesized X-rays, a sub-optimal result will be obtained if we directly feed a real X-ray into the network. We propose to perform style transfer to map real X-rays to the synthesized style. Without paired dataset of real and synthesized X-rays, we exploit CycleGAN [41] to learn the mapping. We collected 200 real X-rays and randomly selected 200 synthetic X-rays from the training set of the paired LIDC dataset. 
+
 PSNR is often used to measure the quality of reconstructed digital signals [31]. Conventionally, CT value is recorded with 12 bits, representing a range of [0, 4095] (the actual Hounsfield unit equals the CT value minus 1024) [4], which makes PSNR an ideal criterion for image quality evaluation. 
+
 SSIM is a metric to measure the similarity of two images, including brightness, contrast and structure [36]. Compared to PSNR, SSIM can match human{\textquoteright}s subjective evaluation better. 
+
 We first qualitatively evaluate CT reconstruction results shown in Fig. 6, where X2CT-CNN is the proposed network 
+
 Figure 6. Reconstructed CT scans from different approaches. 2DCNN is our reproduced baseline model [13]; X2CT-CNN is our generator network optimized by the MSE loss alone and X2CT-GAN is our GAN-based model optimized by total objective. {\textquoteleft}+S{\textquoteright} means single-view X-ray input and {\textquoteleft}+B{\textquoteright} means biplanar X-rays input. The first row demonstrates axial slices generated by different models. The last two rows are 3D renderings of generated CT scans in the PA and lateral view, respectively. 
+
 supervised only by the reconstruction loss while X2CTGAN is the one trained with full objectives; {\textquoteleft}+S{\textquoteright} means single-view X-ray input and {\textquoteleft}+B{\textquoteright} means biplanar X-rays input. For comparison, we also reproduce the method proposed in [13] (referred as 2DCNN in Fig. 6) as the baseline, one of very few published works tackling the X-ray to CT reconstruction problem using deep learning. Since 2DCNN is designed to deal with single X-ray input, no bi-planar results are shown. From the visual quality evaluation, it is obvious to see the differences. First of all, 2DCNN and X2CT-CNN generate very blurry volumes while X2CTGAN maintains small anatomical structures. Secondly, though missing reconstruction details, X2CT-CNN+S generates sharper boundaries of large organs (e.g., heart, lungs and chest wall) than 2DCNN. Last but not least, models trained with biplanar X-rays outperform the ones trained with single view X-ray. More reconstructed CT slices could be found in Fig. 8. 
+
 Quantitative results are summarized in Table 1. Biplanar inputs significantly improve the reconstruction accuracy, about 4 dB improvement for both X2CT-CNN and X2CTGAN, compared to single X-ray input. It is well known that the GAN models often sacrifice MSE-based metrics to achieve visually better results. This phenomenon is also observed here. However, by tuning the relative weights of the voxel-level MSE loss and semantic-level adversarial loss 
+
 Table 1. Quantitative results. 2DCNN is our reproduced model from [13]; X2CT-CNN is our generator network optimized by the MSE loss alone; and X2CT-GAN is our GAN-based model optimized by total objective. {\textquoteleft}+S{\textquoteright} means single-view X-ray input and {\textquoteleft}+B{\textquoteright} means biplanar X-rays input. 
+
 is our cost function, we can make a reasonable trade-off. For example, there is only 1.1 dB decrease in PSNR from X2CT-CNN+B to X2CT-GAN+B, while the visual image quality is dramatically improved as shown in Fig. 6. We argue that visual image quality is as important as (if not more important than) PSNR in CT reconstruction since eventually the images will be read visually by a physician. 
+
 Analysis of Proposed Connection Modules To validate the effectiveness of proposed connection modules, we also perform an ablation study in the setting of X2CT-CNN. As shown in Table 2, single view input with Connection-B achieves 0.7 dB improvement in PSNR. The biplanar 
+
 Table 2. Evaluation of different connection modules. {\textquoteleft}XC{\textquoteright} denotes X2CT-CNN model without the proposed Connection-B and Connection-C module. {\textquoteleft}+S{\textquoteright} means the model{\textquoteright}s input is a single-view X-ray and {\textquoteleft}+B{\textquoteright} means biplanar X-rays. {\textquoteleft}CB{\textquoteright} and {\textquoteleft}CC{\textquoteright} denote Connection-B and Connection-C respectively as shown in Fig. 4. 
+
 Table 3. Evaluation of different settings in the GAN framework. {\textquoteleft}RL{\textquoteright} and {\textquoteleft}PL{\textquoteright} denote the reconstruction and projection loss, respectively. {\textquoteleft}CD{\textquoteright} means that input X-ray information is fed to the discriminator to achieve a conditional GAN. 
+
 input, even without skip connections, surpasses the single view due to the complementary information injected to the network. And in our biplanar model, Connection-B and Connection-C are interdependent so that we regard them as one module. As can be seen, the biplanar model with this module surpasses other combinations by a large margin both in PSNR and SSIM. 
+
 Different Settings in GAN Framework The effects of different settings in the GAN framework are summarized in Table 3. As the first row shows, adversarial loss alone performs poorly on PSNR and SSIM due to the lack of strong constraints. The most significant improvement comes from the reconstruction loss being added to the GAN framework. Projection loss and the conditional information bring additional improvement slightly. 
+
 Since the ultimate goal is to reconstruct a CT scan from real X-rays, we finally evaluate our model on real-world data, despite the model is trained on synthetic data. As we have no corresponding 3D CT volumes for real X-rays, only qualitative evaluation is conducted. Visual results are presented in Fig. 7, we could see that the reconstructed lung and surface structures are quite plausible. 
+
 Figure 7. CT reconstruction from real-world X-rays. Two subjects are shown here. The first and second columns are real X-rays in two views. The following two columns are transformed X-rays by CycleGAN [41]. The last two columns show 3D renderings of reconstructed internal structures and surfaces. Dotted ellipses highlight regions of high-quality anatomical reconstruction. 
+
  
+
 Figure 8. Examples of reconstructed CT slices (a) and corresponding groundtruth (b). As could be seen, our method reconstructs the shape and appearance of major anatomical structures accurately. 
+
 6. Conclusions 
+
 In this paper, we explored the possibility of reconstructing a 3D CT scan from biplanar 2D X-rays in an end-to-end fashion. To solve this challenging task, we combined the reconstruction loss, the projection loss and the adversarial loss in the GAN framework. Moreover, a specially designed generator network is exploited to increase the data dimension from 2D to 3D. Our experiments qualitatively and quantitatively demonstrate that biplanar X-rays are superior to single view X-ray in the 3D reconstruction process. For future work, we will collaborate physicians to evaluate the clinical value of the reconstructed CT scans, including measuring the size of major organs and dose planning in radiation therapy, etc. 
+
 References 
