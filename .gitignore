@@ -3,6 +3,8 @@ data/*.zip
 data/*.json
 temp/
 prep/
+pdf/
+storage/
 .env
 
 # Byte-compiled / optimized / DLL files
