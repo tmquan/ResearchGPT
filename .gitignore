@@ -1,10 +1,11 @@
 data/*.pdf
 data/*.zip
 data/*.json
+data/
 temp/
 prep/
 pdf/
-storage/
+.storage/
 .env
 
 # Byte-compiled / optimized / DLL files
